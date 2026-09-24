@@ -21,12 +21,12 @@ type Entry = {
 // Returns only the chat models the API key can access. Anything on models.dev
 // that the key no longer has (e.g. a retired model) disappears from the picker.
 export async function discover(baseURL: string, apiKey: string, catalog: Record<string, Model>) {
-  const res = await fetch(`${baseURL.replace(/\/+$/, "")}/zeldoc/models`, {
+  const response = await fetch(`${baseURL.replace(/\/+$/, "")}/zeldoc/models`, {
     headers: { Authorization: `Bearer ${apiKey}` },
     signal: AbortSignal.timeout(3_000),
   })
-  if (!res.ok) throw new Error(`Failed to fetch Zeldoc models: ${res.status}`)
-  const entries = parse(await res.json())
+  if (!response.ok) throw new Error(`Failed to fetch Zeldoc models: ${response.status}`)
+  const entries = parse(await response.json())
 
   return Object.fromEntries(
     entries

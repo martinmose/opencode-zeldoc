@@ -1,15 +1,8 @@
 {
   "name": "opencode-zeldoc",
   "version": "0.1.0",
-  "description": "opencode plugin that shows only the Zeldoc models your API key can access",
+  "description": "OpenCode plugin that shows exactly the Zeldoc models your API key can use, with their limits, prices and capabilities.",
   "type": "module",
-  "license": "MIT",
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/martinmose/opencode-zeldoc.git"
-  },
-  "homepage": "https://github.com/martinmose/opencode-zeldoc#readme",
-  "bugs": "https://github.com/martinmose/opencode-zeldoc/issues",
   "main": "./src/index.ts",
   "exports": {
     ".": "./src/index.ts",
@@ -21,11 +14,26 @@
   "keywords": [
     "opencode",
     "opencode-plugin",
-    "zeldoc"
+    "plugin",
+    "zeldoc",
+    "models",
+    "llm",
+    "provider"
   ],
+  "license": "MIT",
+  "author": "Martin Mose Facondini",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/martinmose/opencode-zeldoc.git"
+  },
+  "homepage": "https://github.com/martinmose/opencode-zeldoc#readme",
+  "bugs": {
+    "url": "https://github.com/martinmose/opencode-zeldoc/issues"
+  },
   "scripts": {
     "test": "bun test",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "tsc --noEmit && bun test"
   },
   "peerDependencies": {
     "@opencode-ai/plugin": "*"
