@@ -1,0 +1,33 @@
+{
+  "name": "opencode-zeldoc",
+  "version": "0.1.0",
+  "description": "opencode plugin that shows only the Zeldoc models your API key can access",
+  "type": "module",
+  "license": "MIT",
+  "main": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./server": "./src/index.ts"
+  },
+  "files": [
+    "src"
+  ],
+  "keywords": [
+    "opencode",
+    "opencode-plugin",
+    "zeldoc"
+  ],
+  "scripts": {
+    "test": "bun test",
+    "typecheck": "tsc --noEmit"
+  },
+  "peerDependencies": {
+    "@opencode-ai/plugin": "*"
+  },
+  "devDependencies": {
+    "@opencode-ai/plugin": "^1.18.32",
+    "@opencode-ai/sdk": "^1.18.32",
+    "@types/bun": "latest",
+    "typescript": "^5.9.0"
+  }
+}

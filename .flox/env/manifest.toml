@@ -1,0 +1,17 @@
+schema-version = "1.14.0"
+
+[install]
+bun.pkg-path = "bun"
+
+[hook]
+on-activate = """
+  bun install
+"""
+
+[options]
+systems = [
+  "aarch64-darwin",
+  "aarch64-linux",
+  "x86_64-darwin",
+  "x86_64-linux",
+]
