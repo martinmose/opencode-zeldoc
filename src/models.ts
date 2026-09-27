@@ -3,7 +3,7 @@ import type { Model } from "@opencode-ai/sdk/v2"
 // One entry of GET /v1/zeldoc/models (the Zeldoc platform API's public model
 // catalog). Prices are decimal strings in USD per 1M tokens, already what the
 // key's organization pays.
-type Entry = {
+export type Entry = {
   id: string
   mode: string | null
   limits: { context: number | null; output: number | null }
@@ -20,19 +20,19 @@ type Entry = {
 
 // Returns only the chat models the API key can access. Anything on models.dev
 // that the key no longer has (e.g. a retired model) disappears from the picker.
-export async function discover(baseURL: string, apiKey: string, catalog: Record<string, Model>) {
+export async function fetchCatalog(baseURL: string, apiKey: string) {
   const response = await fetch(`${baseURL.replace(/\/+$/, "")}/zeldoc/models`, {
     headers: { Authorization: `Bearer ${apiKey}` },
     signal: AbortSignal.timeout(3_000),
   })
   if (!response.ok) throw new Error(`Failed to fetch Zeldoc models: ${response.status}`)
-  const entries = parse(await response.json())
+  return parse(await response.json()).filter((entry) => entry.mode === "chat")
+}
 
-  return Object.fromEntries(
-    entries
-      .filter((entry) => entry.mode === "chat")
-      .map((entry) => [entry.id, toModel(entry, baseURL, catalog[entry.id])]),
-  )
+// OpenCode 1: the catalog as a provider.models hook result.
+export async function discover(baseURL: string, apiKey: string, catalog: Record<string, Model>) {
+  const entries = await fetchCatalog(baseURL, apiKey)
+  return Object.fromEntries(entries.map((entry) => [entry.id, toModel(entry, baseURL, catalog[entry.id])]))
 }
 
 function parse(body: unknown): Entry[] {
@@ -94,7 +94,7 @@ function toModel(entry: Entry, baseURL: string, template: Model | undefined): Mo
   }
 }
 
-function price(value: string | null, fallback: number | undefined) {
+export function price(value: string | null, fallback: number | undefined) {
   if (value === null) return fallback ?? 0
   const parsed = Number(value)
   return Number.isFinite(parsed) ? parsed : (fallback ?? 0)

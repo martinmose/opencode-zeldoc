@@ -36,11 +36,21 @@
     "prepublishOnly": "tsc --noEmit && bun test"
   },
   "peerDependencies": {
-    "@opencode-ai/plugin": "*"
+    "@opencode-ai/plugin": "*",
+    "@opencode/plugin": "^2.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@opencode-ai/plugin": {
+      "optional": true
+    },
+    "@opencode/plugin": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "@opencode-ai/plugin": "^1.18.32",
     "@opencode-ai/sdk": "^1.18.32",
+    "@opencode/plugin": "^2.0.18",
     "@types/bun": "latest",
     "typescript": "^5.9.0"
   }
