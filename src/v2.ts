@@ -1,6 +1,7 @@
 import type { Model, Plugin, Provider } from "@opencode/plugin"
 import type { ProviderRecord } from "@opencode/plugin/promise/provider"
 import { fetchCatalog, price, type Entry } from "./models.ts"
+import { keyFor, PinnedKeyKind, pinnedKeyCache } from "./profile.ts"
 
 const providerID = "zeldoc"
 // OpenCode 2 keeps a background service running across TUI restarts, so a
@@ -13,10 +14,22 @@ type USD = Model.Info["cost"][number]["input"]
 // catalog is fetched here and captured for the transform to replay.
 export async function setup(ctx: Plugin.Context) {
   let inventory: { apiKey: string; entries: Entry[] } | undefined
+  // The key a `.zeldoc-profile` file picks for this location's project, if any.
+  const directory = ctx.location?.directory
+  const pins = directory ? pinnedKeyCache(directory) : undefined
+
+  // A pin wins over OpenCode's own key. A pin without a key lists nothing
+  // from Zeldoc: OpenCode's own key may be another customer's.
+  async function currentKey() {
+    const pinned = pins ? await pins.current() : undefined
+    if (pinned?.kind === PinnedKeyKind.Key) return pinned.key
+    if (pinned?.kind === PinnedKeyKind.Error) return undefined
+    return activeKey(ctx)
+  }
 
   // force: fetch even though the active key already has an inventory.
   async function load(force: boolean) {
-    const apiKey = await activeKey(ctx)
+    const apiKey = await currentKey()
     // Never show one key's models for another key.
     if (inventory?.apiKey !== apiKey) inventory = undefined
     if (!apiKey || (inventory && !force)) return
@@ -40,10 +53,41 @@ export async function setup(ctx: Plugin.Context) {
   }
 
   await load(true)
-  await ctx.provider.transform((editor) => {
-    const record = editor.get(providerID)
-    if (record && inventory) editor.models.set(providerID, toModels(inventory.entries, record))
-  })
+  const registrations: Array<{ dispose(): Promise<void> }> = [
+    await ctx.provider.transform((editor) => {
+      const record = editor.get(providerID)
+      if (!record) return
+      // Makes Zeldoc available in a pinned project without a stored login or
+      // ZELDOC_API_KEY. With one, OpenCode sends the connection's key; the
+      // http.request hook below replaces it.
+      const pinnedKey = pins ? keyFor(pins.last) : undefined
+      if (pinnedKey !== undefined)
+        editor.update(providerID, (provider) => {
+          provider.settings = { ...provider.settings, apiKey: pinnedKey }
+          provider.activation = "enabled"
+        })
+      if (inventory) editor.models.set(providerID, toModels(inventory.entries, record))
+    }),
+  ]
+  // Each Zeldoc request in a pinned project goes out with the pinned key, or
+  // fails saying why there is none; never with OpenCode's own key.
+  if (pins)
+    registrations.push(
+      await ctx.session.hook(
+        "http.request",
+        async (input) => {
+          const pinned = await pins.current()
+          if (pinned.kind === PinnedKeyKind.None) return
+          if (pinned.kind === PinnedKeyKind.Error) throw new Error(pinned.message)
+          const headers = new Headers(input.request.headers)
+          headers.set("authorization", `Bearer ${pinned.key}`)
+          input.request = new Request(input.request, { headers })
+          // The pin now picks another key: list that key's models.
+          if (inventory && inventory.apiKey !== pinned.key) void refresh(false)
+        },
+        { providerID },
+      ),
+    )
 
   const controller = new AbortController()
   void (async () => {
@@ -57,9 +101,10 @@ export async function setup(ctx: Plugin.Context) {
   })().catch(() => {})
   const timer = setInterval(() => void refresh(true), refreshInterval)
 
-  return () => {
+  return async () => {
     clearInterval(timer)
     controller.abort()
+    await Promise.all(registrations.map((registration) => registration.dispose()))
   }
 }
 

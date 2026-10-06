@@ -36,8 +36,17 @@ Always run both `bun test` and `bun run typecheck` before considering work done.
   non-function exports, so keep this file export-clean.
 - `src/models.ts`: fetching the catalog, and the OpenCode 1 model mapping. No
   import-time side effects.
+- `src/v1.ts`: the OpenCode 1 `server()`: the model list, and a pinned
+  project's key through the `config` hook.
+- `src/profile.ts`: `.zeldoc-profile` pins. Finds the pin and asks the zeldoc
+  CLI for the key (`zeldoc auth token` in the project folder), so the CLI's
+  rules for picking a key are the only ones. `PinnedKeyKind` is a const object,
+  not an `enum`: the package ships TypeScript source, and Node's type stripping
+  cannot run enums.
 - `src/v2.ts`: the OpenCode 2 `setup()` and its model mapping. Delete the
   OpenCode 1 parts once OpenCode 1 support ends.
+- `test/profile.test.ts`: pins in both versions, with a stand-in `zeldoc`
+  script on `PATH`.
 - `test/models.test.ts` (OpenCode 1) and `test/v2.test.ts` (OpenCode 2): tests
   with `bun:test` against a local `Bun.serve` server that answers like the real
   endpoint. The OpenCode 2 tests pass `setup()` a small stand-in for the parts
@@ -61,6 +70,14 @@ Always run both `bun test` and `bun run typecheck` before considering work done.
   OpenCode 2 a failed refresh keeps the last list fetched for the same key.
 - **Never show one key's models for another key.** On OpenCode 2 the list is
   dropped as soon as the active key changes, before the new key's list arrives.
+- **Without a pin, nothing changes**: no CLI call, OpenCode's own key.
+- **A pinned project never uses OpenCode's own key.** It may be another
+  customer's. Without a pinned key, requests fail saying why
+  (`chat.headers` on OpenCode 1, `http.request` on OpenCode 2) and the
+  provider's key is set to `blockedKey`.
+- **OpenCode 1's `chat.headers` input** carries the provider's info as
+  `provider`, not `provider.info` as its types say. Use `model.providerID`, as
+  OpenCode's own plugins do (seen live in 1.18.34).
 - **Prices** arrive as decimal strings in USD per 1M tokens, which is the unit
   OpenCode's `cost` uses.
 

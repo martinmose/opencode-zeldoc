@@ -1,6 +1,6 @@
 {
   "name": "opencode-zeldoc",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "OpenCode plugin that shows exactly the Zeldoc models your API key can use, with their limits, prices and capabilities.",
   "type": "module",
   "main": "./src/index.ts",
@@ -48,10 +48,10 @@
     }
   },
   "devDependencies": {
-    "@opencode-ai/plugin": "^1.18.32",
-    "@opencode-ai/sdk": "^1.18.32",
-    "@opencode/plugin": "^2.0.18",
+    "@opencode-ai/plugin": "^1.18.34",
+    "@opencode-ai/sdk": "^1.18.34",
+    "@opencode/plugin": "^2.0.23",
     "@types/bun": "latest",
-    "typescript": "^5.9.0"
+    "typescript": "^5.9.3"
   }
 }
