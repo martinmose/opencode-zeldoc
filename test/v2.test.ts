@@ -81,6 +81,7 @@ function makeHost(record: ProviderRecord, key: { current: string | undefined }) 
       },
       async transform(callback: (editor: ProviderEditor) => void) {
         transforms.push(callback)
+        return { async dispose() {} }
       },
       async reload() {
         host.reloads++
