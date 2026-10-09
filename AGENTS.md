@@ -43,8 +43,9 @@ Always run both `bun test` and `bun run typecheck` before considering work done.
   rules for picking a key are the only ones. `PinnedKeyKind` is a const object,
   not an `enum`: the package ships TypeScript source, and Node's type stripping
   cannot run enums.
-- `src/v2.ts`: the OpenCode 2 `setup()` and its model mapping. Delete the
-  OpenCode 1 parts once OpenCode 1 support ends.
+- `src/v2.ts`: the OpenCode 2 `setup()`, its model mapping and the
+  `/zeldoc-debug` command. Delete the OpenCode 1 parts once OpenCode 1 support
+  ends.
 - `test/profile.test.ts`: pins in both versions, with a stand-in `zeldoc`
   script on `PATH`.
 - `test/models.test.ts` (OpenCode 1) and `test/v2.test.ts` (OpenCode 2): tests
@@ -68,6 +69,14 @@ Always run both `bun test` and `bun run typecheck` before considering work done.
 - **Fall back to `provider.models`** (the models.dev list) on any failure.
   Returning `{}` would leave the user with no Zeldoc models at all. On
   OpenCode 2 a failed refresh keeps the last list fetched for the same key.
+- **A fallback says why.** A failed fetch names the URL and what the endpoint
+  answered. OpenCode 1 logs it with `client.app.log`. OpenCode 2 gives plugins
+  no logger and drops their console output (checked in 2.0.26), so
+  `/zeldoc-debug` reports it instead. Without this, a key that cannot reach the
+  catalog looks exactly like a key with only ZDev.
+- **Never show the key**, in a log line, an error or the debug report: the
+  report stays in the session, where the model reads it. Show the first 8 hex
+  characters of its SHA-256, which the dashboard's Key column shows too.
 - **Never show one key's models for another key.** On OpenCode 2 the list is
   dropped as soon as the active key changes, before the new key's list arrives.
 - **Without a pin, nothing changes**: no CLI call, OpenCode's own key.

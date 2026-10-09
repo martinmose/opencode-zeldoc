@@ -40,8 +40,16 @@ export async function server(input: PluginInput): Promise<Hooks> {
         if (!apiKey || !baseURL) return provider.models
 
         // Keep the models.dev catalog when discovery fails instead of leaving the user with no models.
-        return discover(baseURL, apiKey, provider.models).catch(() => provider.models)
+        return discover(baseURL, apiKey, provider.models).catch((error: unknown) => {
+          warn(input?.client, `Showing models.dev's Zeldoc models: ${error instanceof Error ? error.message : error}`)
+          return provider.models
+        })
       },
     },
   }
+}
+
+// Goes to OpenCode's log file. Not awaited: a log line must never hold up the model list.
+function warn(client: PluginInput["client"] | undefined, message: string) {
+  client?.app.log({ body: { service: "opencode-zeldoc", level: "warn", message } }).catch(() => {})
 }

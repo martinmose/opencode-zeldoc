@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test"
+import { createOpencodeClient } from "@opencode-ai/sdk/client"
 import type { Model, Provider } from "@opencode-ai/sdk/v2"
 import plugin from "../src/index.ts"
 
@@ -130,4 +131,34 @@ test("keeps the models.dev catalog when discovery fails", async () => {
   const provider = makeProvider(`${server.url}v1`)
 
   expect(await models(provider)).toEqual(provider.models)
+})
+
+test("logs why discovery failed to OpenCode's log, without the key", async () => {
+  const logs: unknown[] = []
+  // One local server plays both Zeldoc and OpenCode's own server, which plugins log through.
+  using server = Bun.serve({
+    port: 0,
+    async fetch(request) {
+      if (new URL(request.url).pathname === "/log") {
+        logs.push(await request.json())
+        return Response.json(true)
+      }
+      return Response.json({ error: { message: "No access for test-token" } }, { status: 403 })
+    },
+  })
+  const provider = makeProvider(`${server.url}v1`)
+  const client = createOpencodeClient({ baseUrl: server.url.href })
+  const hooks = await plugin.server({ client } as never)
+
+  const result = await hooks.provider!.models!(provider, { auth: { type: "api", key: "test-token" } })
+  for (let attempt = 0; attempt < 100 && logs.length === 0; attempt++) await Bun.sleep(10)
+
+  expect(result).toEqual(provider.models)
+  expect(logs).toEqual([
+    {
+      service: "opencode-zeldoc",
+      level: "warn",
+      message: `Showing models.dev's Zeldoc models: GET ${server.url}v1/zeldoc/models answered 403: No access for [API key]`,
+    },
+  ])
 })

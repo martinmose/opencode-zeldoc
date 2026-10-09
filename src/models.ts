@@ -20,24 +20,59 @@ export type Entry = {
 
 // Returns only the chat models the API key can access. Anything on models.dev
 // that the key no longer has (e.g. a retired model) disappears from the picker.
+// A failure says what the endpoint answered, so a log or the debug report
+// can tell "the request failed" from "the key has few models".
 export async function fetchCatalog(baseURL: string, apiKey: string) {
-  const response = await fetch(`${baseURL.replace(/\/+$/, "")}/zeldoc/models`, {
+  const url = `${baseURL.replace(/\/+$/, "")}/zeldoc/models`
+  // Never repeat the key, should an answer echo it.
+  const fail = (reason: string) => {
+    const message = `GET ${url} ${reason}`
+    return new Error(apiKey ? message.replaceAll(apiKey, "[API key]") : message)
+  }
+  const response = await fetch(url, {
     headers: { Authorization: `Bearer ${apiKey}` },
     signal: AbortSignal.timeout(3_000),
+  }).catch((error: unknown) => {
+    throw fail(`failed: ${describe(error)}`)
   })
-  if (!response.ok) throw new Error(`Failed to fetch Zeldoc models: ${response.status}`)
-  return parse(await response.json()).filter((entry) => entry.mode === "chat")
+  if (!response.ok) throw fail(`answered ${response.status}${await errorDetail(response)}`)
+  const body: unknown = await response.json().catch(() => undefined)
+  if (!isRecord(body) || !Array.isArray(body.data)) throw fail(`answered ${response.status} without a model list`)
+  return body.data
+    .filter((item): item is Entry => isRecord(item) && typeof item.id === "string")
+    .filter((entry) => entry.mode === "chat")
+}
+
+function describe(error: unknown) {
+  if (!(error instanceof Error)) return String(error)
+  // Node's fetch says only "fetch failed"; the cause says why.
+  return error.cause instanceof Error ? `${error.message}: ${error.cause.message}` : error.message
+}
+
+// The error the endpoint gave, else the start of what it sent (a proxy's page, say).
+async function errorDetail(response: Response) {
+  const text = (await response.text().catch(() => "")).trim()
+  if (!text) return ""
+  return `: ${errorMessage(text) ?? text.replace(/\s+/g, " ").slice(0, 200)}`
+}
+
+function errorMessage(text: string) {
+  let body: unknown
+  try {
+    body = JSON.parse(text)
+  } catch {
+    return undefined
+  }
+  if (!isRecord(body)) return undefined
+  if (typeof body.error === "string") return body.error
+  if (isRecord(body.error) && typeof body.error.message === "string") return body.error.message
+  return typeof body.message === "string" ? body.message : undefined
 }
 
 // OpenCode 1: the catalog as a provider.models hook result.
 export async function discover(baseURL: string, apiKey: string, catalog: Record<string, Model>) {
   const entries = await fetchCatalog(baseURL, apiKey)
   return Object.fromEntries(entries.map((entry) => [entry.id, toModel(entry, baseURL, catalog[entry.id])]))
-}
-
-function parse(body: unknown): Entry[] {
-  if (!isRecord(body) || !Array.isArray(body.data)) throw new Error("Unexpected Zeldoc model catalog response")
-  return body.data.filter((item): item is Entry => isRecord(item) && typeof item.id === "string")
 }
 
 // The endpoint is the source of truth for limits, prices and capabilities;

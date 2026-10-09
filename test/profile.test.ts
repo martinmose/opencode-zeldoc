@@ -147,6 +147,7 @@ function makeHost(directory: string) {
         return { async dispose() {} }
       },
     },
+    command: { transform: async () => ({ async dispose() {} }) },
     event: {
       async *subscribe({ signal }: { signal: AbortSignal }) {
         await new Promise((resolve) => signal.addEventListener("abort", resolve, { once: true }))

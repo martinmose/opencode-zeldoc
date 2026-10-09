@@ -1,5 +1,7 @@
 import { expect, test } from "bun:test"
+import { createHash } from "node:crypto"
 import type { Model, Plugin } from "@opencode/plugin"
+import type { CommandDefinition, CommandEditor, CommandInvocation } from "@opencode/plugin/promise/command"
 import type { ProviderEditor, ProviderRecord } from "@opencode/plugin/promise/provider"
 import plugin from "../src/index.ts"
 
@@ -60,11 +62,25 @@ function entry(id: string, overrides: Record<string, unknown> = {}) {
 // every call, so a test can switch it and announce that with emit().
 function makeHost(record: ProviderRecord, key: { current: string | undefined }) {
   const transforms: Array<(editor: ProviderEditor) => void> = []
+  const commands: CommandDefinition[] = []
   const pending: unknown[] = []
   let wake: (() => void) | undefined
-  const host = { reloads: 0 }
+  const host = { reloads: 0, synthetic: [] as Array<{ sessionID: string; text: string; resume?: boolean }> }
 
   const context = {
+    app: { name: "opencode", version: "2.0.26", channel: "latest" },
+    command: {
+      async transform(callback: (editor: CommandEditor) => void) {
+        callback({ add: (definition) => commands.push(definition) })
+        return { async dispose() {} }
+      },
+    },
+    session: {
+      async synthetic(input: { sessionID: string; text: string; resume?: boolean }) {
+        host.synthetic.push(input)
+        return {}
+      },
+    },
     integration: {
       connection: {
         async active() {
@@ -109,6 +125,12 @@ function makeHost(record: ProviderRecord, key: { current: string | undefined }) 
     emit(event: unknown) {
       pending.push(event)
       wake?.()
+    },
+    // Runs a plugin command as the user typing `/name` in a session would.
+    async run(name: string) {
+      const command = commands.find((definition) => definition.name === name)
+      if (!command) throw new Error(`no command ${name}`)
+      await command.execute({ sessionID: "ses_test" } as unknown as CommandInvocation)
     },
     // Replays the registered transforms like OpenCode does. undefined means
     // the plugin left the models.dev catalog as it was.
@@ -243,4 +265,53 @@ test("drops the previous key's models when the key changes", async () => {
   await cleanup?.()
 
   expect(host.models()).toBeUndefined()
+})
+
+test("/zeldoc-debug says why the list is models.dev's, without showing the key", async () => {
+  // A sandbox proxy that adds the real key to chat requests only: the catalog sees its placeholder.
+  using server = Bun.serve({
+    port: 0,
+    fetch() {
+      return Response.json({ error: "Missing API key" }, { status: 401 })
+    },
+  })
+  const host = makeHost(makeRecord(`${server.url}v1`), { current: "proxy-managed" })
+
+  const cleanup = await plugin.setup(host.context)
+  await host.run("zeldoc-debug")
+  await cleanup?.()
+
+  expect(host.synthetic).toHaveLength(1)
+  const [report] = host.synthetic
+  expect(report.sessionID).toBe("ses_test")
+  expect(report.resume).toBe(false)
+  const fingerprint = createHash("sha256").update("proxy-managed").digest("hex").slice(0, 8)
+  expect(report.text).toContain(`Key: ${fingerprint}, from the ZELDOC_API_KEY environment variable.`)
+  expect(report.text).toContain("Models: models.dev's Zeldoc models, not this key's.")
+  expect(report.text).toContain(`GET ${server.url}v1/zeldoc/models answered 401: Missing API key`)
+  expect(report.text).not.toContain("proxy-managed")
+})
+
+test("/zeldoc-debug refreshes the list before reporting it", async () => {
+  let answers = 0
+  using server = Bun.serve({
+    port: 0,
+    fetch() {
+      // Fails when OpenCode starts, works by the time the user asks.
+      if (answers++ === 0) return new Response(null, { status: 503 })
+      return Response.json({ data: [entry("zdev"), entry("anthropic/claude-opus-5.5")] })
+    },
+  })
+  const host = makeHost(makeRecord(`${server.url}v1`), { current: "test-token" })
+
+  const cleanup = await plugin.setup(host.context)
+  expect(host.models()).toBeUndefined()
+  await host.run("zeldoc-debug")
+  await cleanup?.()
+
+  expect<unknown>(host.models()?.map((model) => model.id)).toEqual(["zdev", "anthropic/claude-opus-5.5"])
+  const [report] = host.synthetic
+  expect(report.text).toContain("Models: 2 from Zeldoc for this key")
+  expect(report.text).toContain(": zdev, anthropic/claude-opus-5.5")
+  expect(report.text).not.toContain("Last fetch failed")
 })
