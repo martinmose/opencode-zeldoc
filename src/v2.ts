@@ -150,7 +150,8 @@ export async function setup(ctx: Plugin.Context) {
       ),
     )
   // `/zeldoc-debug` refreshes the list, so the report says what happens now.
-  // resume: false adds the report to the session without starting a model turn.
+  // The report starts a model turn. With resume: false OpenCode only queues it
+  // in the session's inbox until the next turn, and no client shows it (2.0.28).
   // A command that fails to register must not cost the user the model list.
   const debug = await ctx.command
     .transform((editor) =>
@@ -160,7 +161,7 @@ export async function setup(ctx: Plugin.Context) {
         async execute(input) {
           await refresh(true)
           const text = await report()
-          await ctx.session.synthetic({ sessionID: input.sessionID, description: `/${debugCommand}`, text, resume: false })
+          await ctx.session.synthetic({ sessionID: input.sessionID, description: `/${debugCommand}`, text })
         },
       }),
     )

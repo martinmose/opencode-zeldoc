@@ -305,7 +305,8 @@ test("/zeldoc-debug says why the list is models.dev's, without showing the key",
   expect(host.synthetic).toHaveLength(1)
   const [report] = host.synthetic
   expect(report.sessionID).toBe("ses_test")
-  expect(report.resume).toBe(false)
+  // resume: false would leave the report unseen in the session inbox.
+  expect(report.resume).toBeUndefined()
   const fingerprint = createHash("sha256").update("proxy-managed").digest("hex").slice(0, 8)
   expect(report.text).toContain(`Key: ${fingerprint}, from the ZELDOC_API_KEY environment variable.`)
   expect(report.text).toContain("Models: models.dev's Zeldoc models, not this key's.")

@@ -160,7 +160,7 @@ OpenCode is showing the models.dev list: either the plugin is not installed
 OpenCode 2), or it could not get your key's list.
 
 To see why, in OpenCode 2 run `/zeldoc-debug` in a session. It refreshes the
-list, then adds a short report to the session without starting a model turn:
+list, then adds a short report to the session, which the model replies to:
 the plugin and OpenCode versions, where the key came from (a pin, a stored
 login or `ZELDOC_API_KEY`), the models it got, and why the last fetch failed.
 The report never contains the key itself, only the first 8 characters of its

@@ -46,8 +46,8 @@ Always run both `bun test` and `bun run typecheck` before considering work done.
   not an `enum`: the package ships TypeScript source, and Node's type stripping
   cannot run enums.
 - `src/v2.ts`: the OpenCode 2 `setup()`, its model mapping, the
-  `/zeldoc-debug` command and the `zeldoc` websearch provider. Delete the OpenCode 1 parts once OpenCode 1 support
-  ends.
+  `/zeldoc-debug` command and the `zeldoc` websearch provider. Delete the
+  OpenCode 1 parts once OpenCode 1 support ends.
 - `test/profile.test.ts`: pins in both versions, with a stand-in `zeldoc`
   script on `PATH`.
 - `test/models.test.ts` (OpenCode 1) and `test/v2.test.ts` (OpenCode 2): tests
@@ -76,6 +76,9 @@ Always run both `bun test` and `bun run typecheck` before considering work done.
   no logger and drops their console output (checked in 2.0.26), so
   `/zeldoc-debug` reports it instead. Without this, a key that cannot reach the
   catalog looks exactly like a key with only ZDev.
+- **`/zeldoc-debug` starts a model turn.** Its report is a synthetic message;
+  with `resume: false` OpenCode only queues it in the session inbox, where no
+  client shows it (checked in 2.0.28).
 - **Never show the key**, in a log line, an error or the debug report: the
   report stays in the session, where the model reads it. Show the first 8 hex
   characters of its SHA-256, which the dashboard's Key column shows too.
