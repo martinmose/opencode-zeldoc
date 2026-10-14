@@ -4,6 +4,7 @@ import { tmpdir } from "node:os"
 import { delimiter, join } from "node:path"
 import type { Plugin } from "@opencode/plugin"
 import type { ProviderEditor } from "@opencode/plugin/promise/provider"
+import type { WebSearchDefinition, WebSearchEditor } from "@opencode/plugin/promise/websearch"
 import plugin from "../src/index.ts"
 import { blockedKey, pinFileName, PinnedKeyKind, pinnedKeyCache, resolvePinnedKey } from "../src/profile.ts"
 
@@ -127,19 +128,26 @@ test("OpenCode 1: an unpinned project keeps OpenCode's config", async () => {
 
 // The parts of the OpenCode 2 context a pinned project uses, with no Zeldoc
 // connection: the pin alone must make Zeldoc usable.
-function makeHost(directory: string) {
+function makeHost(directory: string, baseURL?: string) {
   const transforms: Array<(editor: ProviderEditor) => void> = []
+  const searchProviders: WebSearchDefinition[] = []
   const httpHooks: Array<(input: { request: Request }) => Promise<void> | void> = []
   const context = {
     location: { directory },
     integration: { connection: { active: async () => undefined, resolve: async () => undefined } },
     provider: {
-      get: async () => ({ data: { id: "zeldoc", settings: {} } }),
+      get: async () => ({ data: { id: "zeldoc", settings: baseURL ? { baseURL } : {} } }),
       async transform(callback: (editor: ProviderEditor) => void) {
         transforms.push(callback)
         return { async dispose() {} }
       },
       async reload() {},
+    },
+    websearch: {
+      async transform(callback: (editor: WebSearchEditor) => void) {
+        callback({ add: (definition) => searchProviders.push(definition), default: { get: () => undefined, set() {} } })
+        return { async dispose() {} }
+      },
     },
     session: {
       async hook(name: string, callback: (input: { request: Request }) => Promise<void>) {
@@ -157,6 +165,7 @@ function makeHost(directory: string) {
 
   return {
     context,
+    search: (query: string) => searchProviders[0].execute({ query }, { signal: new AbortController().signal }),
     // Replays the transforms; returns the provider as they left it.
     provider() {
       const provider: { settings: Record<string, unknown>; activation: string } = { settings: {}, activation: "auto" }
@@ -210,4 +219,30 @@ test("OpenCode 2: an unpinned project's requests are left alone", async () => {
   expect((await host.send()).headers.get("authorization")).toBe("Bearer sk-opencode")
   expect(host.provider()).toEqual({ settings: {}, activation: "auto" })
   await cleanup?.()
+})
+
+test("OpenCode 2: a pinned project searches with the pinned key, or not at all", async () => {
+  const authorizations: Array<string | null> = []
+  using server = Bun.serve({
+    port: 0,
+    fetch(request) {
+      authorizations.push(request.headers.get("authorization"))
+      return new URL(request.url).pathname === "/v1/search/zeldoc-search"
+        ? Response.json({ results: [{ title: "Hit", url: "https://example.com", snippet: "" }] })
+        : Response.json({ data: [] })
+    },
+  })
+
+  const pinned = makeHost(await project("acme-search", "acme"), `${server.url}v1`)
+  const cleanup = await plugin.setup(pinned.context)
+  expect(await pinned.search("q")).toEqual([{ url: "https://example.com", title: "Hit", time: {} }])
+  await cleanup?.()
+  expect(authorizations.at(-1)).toBe("Bearer sk-acme")
+
+  const blocked = makeHost(await project("initech-search", "initech"), `${server.url}v1`)
+  const cleanupBlocked = await plugin.setup(blocked.context)
+  const requests = authorizations.length
+  await expect(blocked.search("q")).rejects.toThrow("no API key is saved as profile `initech`")
+  await cleanupBlocked?.()
+  expect(authorizations.length).toBe(requests)
 })

@@ -3,6 +3,7 @@ import { createHash } from "node:crypto"
 import type { Model, Plugin } from "@opencode/plugin"
 import type { CommandDefinition, CommandEditor, CommandInvocation } from "@opencode/plugin/promise/command"
 import type { ProviderEditor, ProviderRecord } from "@opencode/plugin/promise/provider"
+import type { WebSearchDefinition, WebSearchEditor } from "@opencode/plugin/promise/websearch"
 import plugin from "../src/index.ts"
 
 function catalogModel(id: string, name: string) {
@@ -63,6 +64,7 @@ function entry(id: string, overrides: Record<string, unknown> = {}) {
 function makeHost(record: ProviderRecord, key: { current: string | undefined }) {
   const transforms: Array<(editor: ProviderEditor) => void> = []
   const commands: CommandDefinition[] = []
+  const searchTransforms: Array<(editor: WebSearchEditor) => void> = []
   const pending: unknown[] = []
   let wake: (() => void) | undefined
   const host = { reloads: 0, synthetic: [] as Array<{ sessionID: string; text: string; resume?: boolean }> }
@@ -101,6 +103,12 @@ function makeHost(record: ProviderRecord, key: { current: string | undefined }) 
       },
       async reload() {
         host.reloads++
+      },
+    },
+    websearch: {
+      async transform(callback: (editor: WebSearchEditor) => void) {
+        searchTransforms.push(callback)
+        return { async dispose() {} }
       },
     },
     event: {
@@ -146,6 +154,19 @@ function makeHost(record: ProviderRecord, key: { current: string | undefined }) 
       } as unknown as ProviderEditor
       transforms.forEach((transform) => transform(editor))
       return result
+    },
+    // Replays the websearch transforms, starting from the config's selection.
+    websearch(selection?: string | false) {
+      const providers: WebSearchDefinition[] = []
+      const editor: WebSearchEditor = {
+        add: (definition) => providers.push(definition),
+        default: {
+          get: () => selection,
+          set: (value) => (selection = value),
+        },
+      }
+      searchTransforms.forEach((transform) => transform(editor))
+      return { providers, selection }
     },
   })
 }
@@ -314,4 +335,64 @@ test("/zeldoc-debug refreshes the list before reporting it", async () => {
   expect(report.text).toContain("Models: 2 from Zeldoc for this key")
   expect(report.text).toContain(": zdev, anthropic/claude-opus-5.5")
   expect(report.text).not.toContain("Last fetch failed")
+})
+
+test("searches Zeldoc.ai with the API key and makes it the default provider", async () => {
+  const requests: Array<{ authorization: string | null; path: string; body: unknown }> = []
+  using server = Bun.serve({
+    port: 0,
+    async fetch(request) {
+      const path = new URL(request.url).pathname
+      if (path === "/v1/zeldoc/models") return Response.json({ data: [] })
+      requests.push({ authorization: request.headers.get("authorization"), path, body: await request.json() })
+      return Response.json({
+        results: [
+          { title: "SearXNG API", url: "https://docs.searxng.org/dev/search_api.html", snippet: "JSON output", date: "" },
+          { title: "Dated", url: "https://example.com/dated", snippet: "", date: "2026-10-01T00:00:00Z" },
+          { title: "No URL", url: "", snippet: "dropped" },
+        ],
+      })
+    },
+  })
+  const host = makeHost(makeRecord(`${server.url}v1`), { current: "test-token" })
+
+  const cleanup = await plugin.setup(host.context)
+  const { providers, selection } = host.websearch()
+  const results = await providers[0].execute({ query: "searxng json api" }, { signal: new AbortController().signal })
+  await cleanup?.()
+
+  expect(selection).toBe("zeldoc")
+  expect(providers.map((provider) => [provider.id, provider.name])).toEqual([["zeldoc", "Zeldoc.ai"]])
+  expect(requests).toEqual([
+    { authorization: "Bearer test-token", path: "/v1/search/zeldoc-search", body: { query: "searxng json api" } },
+  ])
+  expect(results).toEqual([
+    { url: "https://docs.searxng.org/dev/search_api.html", title: "SearXNG API", content: "JSON output", time: {} },
+    { url: "https://example.com/dated", title: "Dated", time: { published: Date.parse("2026-10-01T00:00:00Z") } },
+  ])
+})
+
+test("keeps a websearch selection from the config", async () => {
+  using server = Bun.serve({ port: 0, fetch: () => Response.json({ data: [] }) })
+  const host = makeHost(makeRecord(`${server.url}v1`), { current: "test-token" })
+
+  const cleanup = await plugin.setup(host.context)
+  await cleanup?.()
+
+  expect(host.websearch(false).selection).toBe(false)
+  expect(host.websearch("exa").selection).toBe("exa")
+})
+
+test("search fails without a Zeldoc key, and on an HTTP error", async () => {
+  using server = Bun.serve({ port: 0, fetch: () => new Response(null, { status: 429 }) })
+  const key = { current: undefined as string | undefined }
+  const host = makeHost(makeRecord(`${server.url}v1`), key)
+  const signal = new AbortController().signal
+
+  const cleanup = await plugin.setup(host.context)
+  const [provider] = host.websearch().providers
+  await expect(provider.execute({ query: "q" }, { signal })).rejects.toThrow("No Zeldoc.ai API key")
+  key.current = "test-token"
+  await expect(provider.execute({ query: "q" }, { signal })).rejects.toThrow("HTTP 429")
+  await cleanup?.()
 })

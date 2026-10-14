@@ -38,13 +38,15 @@ Always run both `bun test` and `bun run typecheck` before considering work done.
   import-time side effects.
 - `src/v1.ts`: the OpenCode 1 `server()`: the model list, and a pinned
   project's key through the `config` hook.
+- `src/search.ts`: the call to `POST /v1/search/zeldoc-search` and the mapping
+  of its results to OpenCode 2's websearch results.
 - `src/profile.ts`: `.zeldoc-profile` pins. Finds the pin and asks the zeldoc
   CLI for the key (`zeldoc auth token` in the project folder), so the CLI's
   rules for picking a key are the only ones. `PinnedKeyKind` is a const object,
   not an `enum`: the package ships TypeScript source, and Node's type stripping
   cannot run enums.
-- `src/v2.ts`: the OpenCode 2 `setup()`, its model mapping and the
-  `/zeldoc-debug` command. Delete the OpenCode 1 parts once OpenCode 1 support
+- `src/v2.ts`: the OpenCode 2 `setup()`, its model mapping, the
+  `/zeldoc-debug` command and the `zeldoc` websearch provider. Delete the OpenCode 1 parts once OpenCode 1 support
   ends.
 - `test/profile.test.ts`: pins in both versions, with a stand-in `zeldoc`
   script on `PATH`.
@@ -84,6 +86,12 @@ Always run both `bun test` and `bun run typecheck` before considering work done.
   customer's. Without a pinned key, requests fail saying why
   (`chat.headers` on OpenCode 1, `http.request` on OpenCode 2) and the
   provider's key is set to `blockedKey`.
+- **Search goes to Zeldoc.ai by default** on OpenCode 2. Without a default,
+  OpenCode's websearch tool asks the user, and *Allow* spreads queries over
+  every built-in provider (Exa, Firecrawl, Parallel, Tavily, TinyFish). Set the
+  default only when nothing has picked one, so a `websearch` entry in the
+  user's config still wins. Search uses the same key as the models, pins
+  included.
 - **OpenCode 1's `chat.headers` input** carries the provider's info as
   `provider`, not `provider.info` as its types say. Use `model.providerID`, as
   OpenCode's own plugins do (seen live in 1.18.34).

@@ -4,6 +4,7 @@ import type { Model, Plugin, Provider } from "@opencode/plugin"
 import type { ProviderRecord } from "@opencode/plugin/promise/provider"
 import { fetchCatalog, price, type Entry } from "./models.ts"
 import { keyFor, PinnedKeyKind, pinnedKeyCache } from "./profile.ts"
+import { search } from "./search.ts"
 
 const providerID = "zeldoc"
 // OpenCode 2 keeps a background service running across TUI restarts, so a
@@ -35,18 +36,23 @@ export async function setup(ctx: Plugin.Context) {
     return activeKey(ctx)
   }
 
+  async function currentBaseURL() {
+    const baseURL = await ctx.provider.get({ providerID }).then(
+      (result) => result.data.settings?.baseURL,
+      () => undefined,
+    )
+    return typeof baseURL === "string" ? baseURL : undefined
+  }
+
   // force: fetch even though the active key already has an inventory.
   async function load(force: boolean) {
     const { apiKey } = await currentKey()
     // Never show one key's models for another key.
     if (inventory?.apiKey !== apiKey) inventory = undefined
     if (!apiKey || (inventory && !force)) return
-    const baseURL = await ctx.provider.get({ providerID }).then(
-      (result) => result.data.settings?.baseURL,
-      () => undefined,
-    )
+    const baseURL = await currentBaseURL()
     const at = new Date()
-    if (typeof baseURL !== "string") {
+    if (!baseURL) {
       lastFetch = { apiKey, at, error: "OpenCode has no base URL for the zeldoc provider." }
       return
     }
@@ -105,6 +111,23 @@ export async function setup(ctx: Plugin.Context) {
           provider.activation = "enabled"
         })
       if (inventory) editor.models.set(providerID, toModels(inventory.entries, record))
+    }),
+    // Zeldoc.ai search for the built-in websearch tool, with the same key as
+    // the models. It becomes the default so the agent's searches never reach
+    // another provider; a `websearch` entry in the config still wins.
+    await ctx.websearch.transform((editor) => {
+      editor.add({
+        id: providerID,
+        name: "Zeldoc.ai",
+        async execute(input, { signal }) {
+          const { apiKey, source } = await currentKey()
+          if (!apiKey) throw new Error(`No Zeldoc.ai API key. ${source}`)
+          const baseURL = await currentBaseURL()
+          if (!baseURL) throw new Error("Zeldoc.ai search needs the Zeldoc provider, which OpenCode did not load.")
+          return search(baseURL, apiKey, input.query, signal)
+        },
+      })
+      if (editor.default.get() === undefined) editor.default.set(providerID)
     }),
   ]
   // Each Zeldoc request in a pinned project goes out with the pinned key, or
