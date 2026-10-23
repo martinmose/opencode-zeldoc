@@ -53,5 +53,8 @@
     "@opencode/plugin": "^2.0.23",
     "@types/bun": "latest",
     "typescript": "^5.9.3"
+  },
+  "overrides": {
+    "toml": "^5.0.1"
   }
 }

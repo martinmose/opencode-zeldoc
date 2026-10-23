@@ -57,6 +57,12 @@ Always run both `bun test` and `bun run typecheck` before considering work done.
 - `@opencode-ai/plugin` (OpenCode 1) and `@opencode/plugin` (OpenCode 2) are
   imported for types only, so the published package has no runtime
   dependencies. Keep those imports `import type`.
+- `overrides.toml` in `package.json` lifts `toml` to 5.x in the dev install.
+  `@opencode-ai/plugin` pins `effect@4.0.0-beta.83`, which asks for `toml@^4`,
+  and the advisories against 4.x are fixed only in 5.0.1. Effect calls nothing
+  but `toml.parse(text)`, in its CLI file parser. Remove the override once
+  `@opencode-ai/plugin` moves to a newer effect (4.0.0-rc.112 and later do not
+  depend on toml).
 - `opencode.jsonc`: local dev config that loads the plugin from source in
   OpenCode 1. End users install from npm instead: `"plugin": ["opencode-zeldoc"]`.
   OpenCode 2 needs a plugin directory instead; see the README.
