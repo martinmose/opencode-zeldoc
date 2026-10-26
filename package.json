@@ -24,11 +24,11 @@
   "author": "Martin Mose Facondini",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/martinmose/opencode-zeldoc.git"
+    "url": "git+https://github.com/zeldoc/zeldoc-opencode-plugin.git"
   },
-  "homepage": "https://github.com/martinmose/opencode-zeldoc#readme",
+  "homepage": "https://github.com/zeldoc/zeldoc-opencode-plugin#readme",
   "bugs": {
-    "url": "https://github.com/martinmose/opencode-zeldoc/issues"
+    "url": "https://github.com/zeldoc/zeldoc-opencode-plugin/issues"
   },
   "scripts": {
     "test": "bun test",
